@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>돌려 돌려 돌림판</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        text-align: center;
+        margin: 20px;
+      }
+      #wheelCanvas {
+        border: 1px solid #000;
+        margin-top: 20px;
+      }
+      #controls {
+        margin: 10px 0;
+      }
+      .input-field {
+        margin: 5px 0;
+      }
+      .input-field input[type='text'] {
+        padding: 5px;
+        margin-right: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>네이버 돌림판</h1>
+
+    <!-- 인원수 조정 (최소 2명, 최대 15명) -->
+    <div id="controls">
+      <button id="minusBtn">-</button>
+      <span id="peopleCount">2</span>
+      <button id="plusBtn">+</button>
+    </div>
+
+    <!-- 이름 입력 필드 (동적으로 생성) -->
+    <div id="inputsContainer"></div>
+
+    <!-- 돌림판을 그릴 Canvas -->
+    <canvas id="wheelCanvas" width="500" height="500"></canvas>
+
+    <!-- 돌리기 버튼 -->
+    <div>
+      <button id="spinBtn">돌리기</button>
+    </div>
+
+    <script>
+      /***********************
+       * 강제 당첨 이름 배열 *
+       * (배열에 있는 이름이 입력되어 있다면 해당 후보 중 하나가 당첨됨)
+       ***********************/
+      const forcedNames = ['강현우', '신예지', '최혜진'];
+
+      // 전역 변수 설정
+      let people = 2; // 기본/최소 인원수 2
+      let rotationAngle = 0; // 현재 돌림판 회전 각 (라디안)
+      const MAX_PEOPLE = 15;
+      const MIN_PEOPLE = 2;
+      let finalWinningIndex = null; // 애니메이션 후 최종 당첨 인덱스 저장
+
+      const canvas = document.getElementById('wheelCanvas');
+      const ctx = canvas.getContext('2d');
+      const peopleCountDisplay = document.getElementById('peopleCount');
+      const inputsContainer = document.getElementById('inputsContainer');
+      const plusBtn = document.getElementById('plusBtn');
+      const minusBtn = document.getElementById('minusBtn');
+      const spinBtn = document.getElementById('spinBtn');
+
+      // 인원수 업데이트 시 input 필드와 돌림판 다시 그리기
+      function updatePeopleCount() {
+        peopleCountDisplay.textContent = people;
+        createInputFields();
+        drawWheel();
+      }
+
+      // "+" 버튼 클릭 (최대 15명)
+      plusBtn.addEventListener('click', function () {
+        if (people < MAX_PEOPLE) {
+          people++;
+          updatePeopleCount();
+        } else {
+          alert('최대 ' + MAX_PEOPLE + '명입니다.');
+        }
+      });
+
+      // "–" 버튼 클릭 (최소 2명)
+      minusBtn.addEventListener('click', function () {
+        if (people > MIN_PEOPLE) {
+          people--;
+          updatePeopleCount();
+        } else {
+          alert('최소 ' + MIN_PEOPLE + '명입니다.');
+        }
+      });
+
+      // 인원수에 맞춰 이름 입력 필드를 동적으로 생성
+      function createInputFields() {
+        inputsContainer.innerHTML = '';
+        for (let i = 0; i < people; i++) {
+          const div = document.createElement('div');
+          div.className = 'input-field';
+          const input = document.createElement('input');
+          input.type = 'text';
+          input.placeholder = `이름 ${i + 1}`;
+          input.dataset.index = i;
+          input.classList.add('nameInput');
+          div.appendChild(input);
+          inputsContainer.appendChild(div);
+        }
+      }
+
+      // 돌림판 그리기 함수 (각 영역은 파스텔 톤 색상)
+      function drawWheel() {
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const radius = Math.min(centerX, centerY) - 10;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // 입력된 이름을 가져오기 (빈 칸이면 기본 이름 사용)
+        const nameInputs = inputsContainer.querySelectorAll('.nameInput');
+        const names = [];
+        nameInputs.forEach((input, idx) => {
+          names.push(input.value.trim() || `이름 ${idx + 1}`);
+        });
+
+        const anglePerSegment = (2 * Math.PI) / people;
+        for (let i = 0; i < people; i++) {
+          const startAngle = i * anglePerSegment + rotationAngle;
+          const endAngle = startAngle + anglePerSegment;
+
+          // 파스텔 톤 색상 (HSL: 채도 70%, 밝기 80%)
+          let hue = i * (360 / people);
+          let color = `hsl(${hue}, 70%, 80%)`;
+
+          // 부채꼴 영역 그리기
+          ctx.beginPath();
+          ctx.moveTo(centerX, centerY);
+          ctx.arc(centerX, centerY, radius, startAngle, endAngle);
+          ctx.closePath();
+          ctx.fillStyle = color;
+          ctx.fill();
+          ctx.stroke();
+
+          // 영역 중앙에 이름 텍스트 표시
+          ctx.save();
+          ctx.translate(centerX, centerY);
+          const textAngle = startAngle + anglePerSegment / 2;
+          ctx.rotate(textAngle);
+          ctx.textAlign = 'right';
+          ctx.fillStyle = '#000';
+          ctx.font = '16px sans-serif';
+          ctx.fillText(names[i], radius - 10, 5);
+          ctx.restore();
+        }
+
+        // 상단에 고정된 포인터(화살표) 그리기
+        drawPointer();
+      }
+
+      // 상단 중앙에 포인터(화살표) 그리기
+      function drawPointer() {
+        const centerX = canvas.width / 2;
+        const pointerY = 10;
+        ctx.beginPath();
+        ctx.moveTo(centerX, pointerY);
+        ctx.lineTo(centerX - 10, pointerY + 20);
+        ctx.lineTo(centerX + 10, pointerY + 20);
+        ctx.closePath();
+        ctx.fillStyle = '#FF0000';
+        ctx.fill();
+      }
+
+      // 이름 입력 시마다 돌림판 다시 그리기
+      inputsContainer.addEventListener('input', drawWheel);
+
+      // 돌리기 버튼 클릭 이벤트
+      spinBtn.addEventListener('click', function () {
+        const nameInputs = inputsContainer.querySelectorAll('.nameInput');
+        // 모든 이름이 입력되어 있는지 확인
+        for (let input of nameInputs) {
+          if (input.value.trim() === '') {
+            alert('모든 이름을 입력해주세요.');
+            return;
+          }
+        }
+
+        // 강제 당첨 기능: forcedNames 배열에 포함된 이름의 인덱스를 수집
+        const forcedIndices = [];
+        nameInputs.forEach((input, idx) => {
+          const val = input.value.trim();
+          if (forcedNames.includes(val)) {
+            forcedIndices.push(idx);
+          }
+        });
+
+        let winningIndex;
+        if (forcedIndices.length > 0) {
+          // 강제 후보가 여러 개라면 그 중 하나를 무작위 선택
+          winningIndex = forcedIndices[Math.floor(Math.random() * forcedIndices.length)];
+        } else {
+          winningIndex = Math.floor(Math.random() * people);
+        }
+
+        finalWinningIndex = winningIndex; // 애니메이션 후 결과 확인에 사용
+
+        // --- 회전 각도 계산 (항상 시계방향, 최소 3회전 이상, 자연스러운 배치 적용) ---
+        // 현재 회전 각(°)
+        const initialDeg = (rotationAngle * 180) / Math.PI;
+        // 각 영역의 크기 (°)
+        const anglePerSector = 360 / people;
+        // 당첨 영역의 중앙 (°)
+        const sectorCenter = winningIndex * anglePerSector + anglePerSector / 2;
+        // 원래라면 이 sectorCenter가 -90°(상단)과 맞춰져야 함
+        // → targetCenter = -90 - sectorCenter;
+        // 이제 여기에 무작위 오프셋(offset)을 추가하여 자연스럽게 만듭니다.
+        const offset = Math.random() * (anglePerSector / 2) - anglePerSector / 4; // -¼~+¼ 영역 내
+        const targetCenter = -90 - sectorCenter + offset;
+
+        // 현재 각도와 목표 각도 차이를 계산 (항상 양수, 시계방향)
+        let diff = targetCenter - initialDeg;
+        while (diff < 0) {
+          diff += 360;
+        }
+        // 최소 3회전 이상 (추가 회전수: 3~5회전)
+        const extraSpins = Math.floor(Math.random() * 3) + 3; // 3, 4, 또는 5회전
+        const targetAngleDeg = initialDeg + extraSpins * 360 + diff;
+        // -----------------------------------------------------
+
+        animateRotation(targetAngleDeg);
+      });
+
+      // 회전 애니메이션 (3초 동안, 항상 시계방향)
+      function animateRotation(targetDeg) {
+        const duration = 3000; // ms
+        const startTime = performance.now();
+        const initialDeg = (rotationAngle * 180) / Math.PI;
+
+        function animate(currentTime) {
+          const elapsed = currentTime - startTime;
+          const progress = Math.min(elapsed / duration, 1);
+          const easedProgress = easeOutCubic(progress);
+          const currentDeg = initialDeg + (targetDeg - initialDeg) * easedProgress;
+          rotationAngle = (currentDeg * Math.PI) / 180;
+          drawWheel();
+          if (progress < 1) {
+            requestAnimationFrame(animate);
+          } else {
+            // 애니메이션 종료 시 정확한 각도로 설정
+            rotationAngle = (targetDeg * Math.PI) / 180;
+            drawWheel();
+            announceWinner();
+          }
+        }
+        requestAnimationFrame(animate);
+      }
+
+      // easeOutCubic easing 함수
+      function easeOutCubic(t) {
+        return 1 - Math.pow(1 - t, 3);
+      }
+
+      // 당첨 결과를 출력 (애니메이션 시 계산된 당첨 인덱스를 그대로 사용)
+      function announceWinner() {
+        const nameInputs = inputsContainer.querySelectorAll('.nameInput');
+        const winningName = nameInputs[finalWinningIndex].value;
+        alert('당첨: ' + winningName);
+      }
+
+      // 초기 실행: input 필드 생성 및 돌림판 그리기
+      createInputFields();
+      drawWheel();
+    </script>
+  </body>
+</html>
